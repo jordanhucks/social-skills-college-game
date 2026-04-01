@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIFE Quest | CCU 10-Level Engine</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; background: #0f172a; font-family: 'Outfit', sans-serif; overflow: hidden; }
+        
+        /* THE FIX: Flexbox added to center the canvas perfectly */
+        #game-container { 
+            width: 100vw; 
+            height: 100vh; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+        }
+        
+        .pixel-font { font-family: 'Press Start 2P', cursive; }
+        .glass-ui { background: rgba(0, 35, 40, 0.95); backdrop-filter: blur(16px); border: 2px solid #b78a3c; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+
+    <div id="ui-layer" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="glass-ui p-10 rounded-3xl max-w-2xl w-full mx-4 transform transition-all translate-y-8 opacity-0" id="dialogue-box">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-4 h-4 bg-yellow-400 font-black text-black text-xs flex items-center justify-center animate-bounce">!</div>
+                <h2 class="text-amber-500 pixel-font text-[10px] uppercase tracking-widest leading-none">Social Encounter</h2>
+            </div>
+            <p id="scenario-text" class="text-white text-2xl font-bold mb-8 leading-tight"></p>
+            <div id="options-container" class="space-y-4"></div>
+        </div>
+    </div>
+
+    <div class="absolute top-8 left-8 z-40 w-full pr-16 flex justify-between pointer-events-none">
+        <div>
+            <h1 class="text-white text-4xl font-black italic shadow-black drop-shadow-2xl">LIFE <span style="color: #b78a3c;">QUEST</span></h1>
+            <div class="bg-black/50 backdrop-blur-md px-4 py-2 rounded-xl mt-2 inline-block border border-white/10">
+                <p class="text-white text-sm font-bold uppercase tracking-widest">Score: <span id="score-display" style="color: #00857a;" class="text-xl font-black">0</span></p>
+            </div>
+        </div>
+        <div class="text-right bg-black/50 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10">
+            <p class="text-amber-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Location</p>
+            <p id="level-display" class="text-white text-sm font-bold uppercase tracking-widest">Level 1</p>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * LIFE QUEST: 10-LEVEL DATA ARCHITECTURE
+         */
+        const LEVELS = [
+            { name: "Level 1: Prince Lawn", bg: "#87CEEB", scenario: "A peer drops their books.", opts: [{t:"Help them", p:50}, {t:"Ignore", p:-10}, {t:"Laugh", p:-20}] },
+            { name: "Level 2: HTC Center", bg: "#4fa3c7", scenario: "Someone bumps into you in a crowded line.", opts: [{t:"Yell at them", p:-20}, {t:"Say 'Excuse me'", p:50}, {t:"Glare silently", p:-5}] },
+            { name: "Level 3: Kimbel Library", bg: "#2c3e50", scenario: "You need to find a book, but the librarian is busy.", opts: [{t:"Wait patiently", p:50}, {t:"Interrupt them", p:-20}, {t:"Walk away", p:0}] },
+            { name: "Level 4: Hicks Dining Hall", bg: "#d35400", scenario: "There are no empty tables. You see an acquaintance.", opts: [{t:"Ask to join them", p:50}, {t:"Eat standing up", p:0}, {t:"Demand they move", p:-30}] },
+            { name: "Level 5: Student Union", bg: "#27ae60", scenario: "A club is handing out flyers and approaches you.", opts: [{t:"Politely say 'No thanks'", p:30}, {t:"Take one and say thanks", p:50}, {t:"Push their hand away", p:-20}] },
+            { name: "Level 6: Academic Building", bg: "#8e44ad", scenario: "You arrive late to class. The door is closed.", opts: [{t:"Slam the door open", p:-30}, {t:"Enter quietly and sit in the back", p:50}, {t:"Go home", p:-10}] },
+            { name: "Level 7: The Cottages", bg: "#2980b9", scenario: "Your roommate is playing loud music while you study.", opts: [{t:"Ask politely to turn it down", p:50}, {t:"Break their speaker", p:-50}, {t:"Leave passive-aggressive notes", p:-10}] },
+            { name: "Level 8: Campus Gym", bg: "#c0392b", scenario: "Someone is using the machine you want and looking at their phone.", opts: [{t:"Stare until they move", p:-10}, {t:"Ask 'Hey, how many sets do you have left?'", p:50}, {t:"Tell them to hurry up", p:-20}] },
+            { name: "Level 9: Shuttle Stop", bg: "#16a085", scenario: "The campus bus is full and someone offers you a seat.", opts: [{t:"Say 'Thank you' and take it", p:50}, {t:"Ignore them", p:-10}, {t:"Say 'I don't need your pity'", p:-30}] },
+            { name: "Level 10: Career Fair", bg: "#f39c12", scenario: "An employer asks: 'Tell me about yourself.'", opts: [{t:"Give a confident, practiced introduction", p:100}, {t:"Say 'Uhhhh, I don't know'", p:-10}, {t:"Walk away nervously", p:-20}] }
+        ];
+
+        let globalScore = 0;
+        let currentLevel = 0;
+        let isPaused = false;
+
+        class GameScene extends Phaser.Scene {
+            constructor() { super({ key: 'GameScene' }); }
+
+            preload() {
+                let g = this.make.graphics();
+                
+                // Stick Figure
+                g.lineStyle(3, 0xffffff, 1);
+                g.strokeCircle(16, 10, 8); 
+                g.beginPath();
+                g.moveTo(16, 18); g.lineTo(16, 36); 
+                g.moveTo(16, 24); g.lineTo(4, 16); 
+                g.moveTo(16, 24); g.lineTo(28, 16); 
+                g.moveTo(16, 36); g.lineTo(8, 48); 
+                g.moveTo(16, 36); g.lineTo(24, 48); 
+                g.strokePath();
+                g.generateTexture('stickman', 32, 48);
+
+                // '!' Marker
+                g.clear();
+                g.fillStyle(0xfbbf24, 1); 
+                g.fillRect(0, 0, 32, 32);
+                g.fillStyle(0x000000, 1);
+                g.fillRect(14, 4, 4, 14); 
+                g.fillRect(14, 22, 4, 4); 
+                g.generateTexture('marker', 32, 32);
+
+                // Platform
+                g.clear();
+                g.fillStyle(0x006F71, 1);
+                g.fillRect(0, 0, 200, 32);
+                g.generateTexture('plat', 200, 32);
+
+                // Obstacle
+                g.clear();
+                g.fillStyle(0x64748b, 1);
+                g.fillRect(0, 0, 48, 32);
+                g.generateTexture('obstacle', 48, 32);
+
+                // Door
+                g.clear();
+                g.fillStyle(0x8b4513, 1);
+                g.fillRect(0, 0, 48, 80);
+                g.fillStyle(0xfbbf24, 1); 
+                g.fillCircle(40, 40, 5);
+                g.generateTexture('door', 48, 80);
+            }
+
+            create() {
+                const level = LEVELS[currentLevel];
+                document.getElementById('level-display').innerText = level.name;
+                this.cameras.main.setBackgroundColor(level.bg);
+                
+                this.platforms = this.physics.add.staticGroup();
+                this.platforms.create(400, 580, 'plat').setScale(4, 1).refreshBody(); 
+                this.platforms.create(250, 450, 'plat');
+                this.platforms.create(550, 350, 'plat');
+                this.platforms.create(250, 250, 'plat');
+                this.platforms.create(650, 150, 'plat');
+
+                this.obstacles = this.physics.add.staticGroup();
+                this.obstacles.create(300, 548, 'obstacle');
+                this.obstacles.create(550, 318, 'obstacle');
+
+                this.player = this.physics.add.sprite(50, 500, 'stickman');
+                this.player.setCollideWorldBounds(true);
+
+                this.marker = this.physics.add.sprite(250, 200, 'marker');
+                this.marker.setImmovable(true);
+                this.marker.body.setAllowGravity(false);
+                this.tweens.add({ targets: this.marker, y: 190, yoyo: true, repeat: -1, duration: 800 }); 
+
+                this.door = this.physics.add.sprite(700, 95, 'door');
+                this.door.setImmovable(true);
+                this.door.body.setAllowGravity(false);
+
+                this.physics.add.collider(this.player, this.platforms);
+                this.physics.add.collider(this.player, this.obstacles);
+                this.physics.add.overlap(this.player, this.marker, this.hitMarker, null, this);
+                this.physics.add.overlap(this.player, this.door, this.hitDoor, null, this);
+
+                this.cursors = this.input.keyboard.createCursorKeys();
+            }
+
+            update() {
+                if (isPaused) return;
+
+                if (this.cursors.left.isDown) { this.player.setVelocityX(-260); } 
+                else if (this.cursors.right.isDown) { this.player.setVelocityX(260); } 
+                else { this.player.setVelocityX(0); }
+
+                if (this.cursors.up.isDown && this.player.body.touching.down) {
+                    this.player.setVelocityY(-550);
+                }
+            }
+
+            hitMarker() {
+                this.physics.pause();
+                isPaused = true;
+                
+                showHTMLUI(LEVELS[currentLevel], () => {
+                    this.marker.destroy(); 
+                    this.physics.resume();
+                    isPaused = false;
+                });
+            }
+
+            hitDoor() {
+                if (currentLevel < LEVELS.length - 1) {
+                    currentLevel++;
+                    this.scene.restart(); 
+                } else {
+                    alert(`YOU WIN! CCU LIFE Quest Completed.\nFinal Social Score: ${globalScore}`);
+                    currentLevel = 0;
+                    globalScore = 0;
+                    document.getElementById('score-display').innerText = globalScore;
+                    this.scene.restart();
+                }
+            }
+        }
+
+        // --- DOM UI CONTROLLER ---
+        function showHTMLUI(data, onComplete) {
+            const ui = document.getElementById('ui-layer');
+            const box = document.getElementById('dialogue-box');
+            document.getElementById('scenario-text').innerText = data.scenario;
+            
+            const optsContainer = document.getElementById('options-container');
+            optsContainer.innerHTML = '';
+
+            data.opts.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-5 rounded-2xl bg-white/5 border border-white/10 text-white font-bold text-lg hover:bg-[#b78a3c] transition-all transform hover:scale-[1.02]";
+                btn.innerText = opt.t;
+                btn.onclick = () => {
+                    globalScore += opt.p;
+                    document.getElementById('score-display').innerText = globalScore;
+                    
+                    box.classList.replace('opacity-100', 'opacity-0');
+                    box.classList.replace('translate-y-0', 'translate-y-8');
+                    setTimeout(() => { ui.classList.add('hidden'); onComplete(); }, 300);
+                };
+                optsContainer.appendChild(btn);
+            });
+
+            ui.classList.remove('hidden');
+            setTimeout(() => {
+                box.classList.replace('opacity-0', 'opacity-100');
+                box.classList.replace('translate-y-8', 'translate-y-0');
+            }, 10);
+        }
+
+        // BOOT ENGINE
+        new Phaser.Game({
+            type: Phaser.AUTO, 
+            parent: 'game-container', 
+            transparent: true,
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH,
+                width: 800,
+                height: 600
+            },
+            physics: { default: 'arcade', arcade: { gravity: { y: 800 } } },
+            scene: GameScene
+        });
+    </script>
+</body>
+</html>
