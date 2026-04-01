@@ -1,5 +1,6 @@
-# social-skills-college-game
 # 🎮 LIFE Quest: CCU Edition
+
+### 🚀 [CLICK HERE TO PLAY LIFE QUEST LIVE IN YOUR BROWSER](https://jordanhucks.github.io/social-skills-college-game)
 
 > An interactive 2D platformer engine designed to teach and assess social skills for neurodivergent college students through gamified, campus-themed scenarios.
 
@@ -28,8 +29,7 @@ The engine features a procedural 10-level architecture, taking players across re
 ## 🚀 Getting Started
 Because LIFE Quest uses a single-file architecture, deploying and testing the engine is instantaneous.
 
-### Option 1: Local Server (Recommended)
+### Option 1: Local Server (Recommended for Editing)
 1. Clone the repository:
    ```bash
-   git clone [https://github.com/yourusername/life-quest-ccu.git](https://github.com/yourusername/life-quest-ccu.git)
-   
+   git clone [https://github.com/jordanhucks/social-skills-college-game.git](https://github.com/jordanhucks/social-skills-college-game.git)
